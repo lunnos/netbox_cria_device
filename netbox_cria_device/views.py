@@ -8,24 +8,18 @@ from django.utils.text import slugify
 from dcim.models import Device, Site
 from .forms import CustomDeviceForm, SiteModalForm
 
-# A função de gerar hostname não é mais necessária aqui, pois a lógica
-# será movida para o JavaScript. Mantemos apenas como referência caso precise no futuro.
-# def gerar_hostname_customizado(form_data): ...
-
 class CustomDeviceAddView(View):
     template_name = 'netbox_cria_device/device_add_custom.html'
 
     def get(self, request):
         form = CustomDeviceForm()
 
-        # Prepara os dados dos sites para o JavaScript
-        # Criamos um dicionário mapeando o ID de cada site para o seu slug
         sites_map = {site.id: site.slug for site in Site.objects.all()}
 
         return render(request, self.template_name, {
             'form': form,
             'modal_form': SiteModalForm(),
-            'sites_map_json': json.dumps(sites_map) # Converte o dicionário para uma string JSON
+            'sites_map_json': json.dumps(sites_map)
         })
 
     def post(self, request):
@@ -34,14 +28,11 @@ class CustomDeviceAddView(View):
 
         if form.is_valid():
             device_name = form.cleaned_data['device_name']
-            hostname = form.cleaned_data['hostname'] # Pega o hostname do campo do formulário
+            hostname = form.cleaned_data['hostname']
 
-            # ATENÇÃO: Verifique se o nome do seu campo customizado é 'hostname'
             custom_fields_data = {
                 'hostname': hostname
             }
-
-            # Validação para garantir que o nome principal do dispositivo é único
             if Device.objects.filter(name__iexact=device_name).exists():
                  messages.error(request, f"Um dispositivo com o nome '{device_name}' já existe.")
                  return render(request, self.template_name, {'form': form, 'sites_map_json': self.get_sites_map_json()})
