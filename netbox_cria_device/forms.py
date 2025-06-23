@@ -11,13 +11,11 @@ class CustomDeviceForm(forms.Form):
         help_text="O identificador do dispositivo no inventário"
     )
 
-    # Campo para o hostname, que será preenchido dinamicamente via JavaScript
     hostname = forms.CharField(
         label="Hostname (Campo Customizado)",
         widget=forms.TextInput(attrs={'readonly': True})
     )
 
-    # Campos que ajudam a definir o hostname e o dispositivo
     site = DynamicModelChoiceField(
         queryset=Site.objects.all(),
         label="Site",
@@ -37,7 +35,6 @@ class CustomDeviceForm(forms.Form):
     )
 
 
-# O formulário SiteModalForm permanece o mesmo
 class SiteModalForm(forms.Form):
     name = forms.CharField(
         label="Nome do Site"
