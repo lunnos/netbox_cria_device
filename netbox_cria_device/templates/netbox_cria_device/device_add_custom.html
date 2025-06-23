@@ -1,0 +1,153 @@
+{% extends 'base/base.html' %}
+{% load form_helpers %}
+
+{% block content %}
+<form action="" method="post" class="form">
+    {% csrf_token %}
+    <div class="panel panel-default">
+        <div class="panel-heading"><strong>Criar Novo Dispositivo (Customizado)</strong></div>
+        <div class="panel-body">
+            {# Renderizamos os campos explicitamente para ter mais controle #}
+            {% render_field form.device_name %}
+
+            <div class="form-group">
+                <label for="{{ form.site.id_for_label }}" class="control-label">{{ form.site.label }}</label>
+                <div class="input-group">
+                    {% render_field form.site %}
+                    <button type="button" class="btn btn-primary" title="Criar Novo Site" data-bs-toggle="modal" data-bs-target="#siteCreateModal">
+                        <i class="mdi mdi-plus-thick"></i>
+                    </button>
+                </div>
+                <small class="form-text text-muted">{{ form.site.help_text }}</small>
+            </div>
+
+            {% render_field form.hostname %}
+            {% render_field form.device_role %}
+            {% render_field form.device_type %}
+            {% render_field form.tenant %}
+        </div>
+    </div>
+    <div class="form-group">
+        <button type="submit" class="btn btn-primary">Criar Dispositivo</button>
+        <a href="{{ request.GET.return_url|default:'/dcim/devices/' }}" class="btn btn-default">Cancelar</a>
+    </div>
+</form>
+
+{# ==================== JANELA MODAL PARA CRIAR SITE (inicialmente oculta) ==================== #}
+<div class="modal fade" id="siteCreateModal" tabindex="-1" role="dialog">
+    <div class="modal-dialog" role="document">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Criar Novo Site</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            {# Usamos um ID único para o formulário do modal para o JavaScript encontrá-lo #}
+            <form id="siteCreateForm">
+                <div class="modal-body">
+                    {# Renderiza os campos do formulário do modal que passamos pela view #}
+                    {% render_form modal_form %}
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-default" data-bs-dismiss="modal">Cancelar</button>
+                    <button type="submit" class="btn btn-primary">Criar Site</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{# ==================== BLOCO JAVASCRIPT ==================== #}
+{% block javascript %}
+{{ super() }}
+
+{# Passamos o mapa de sites (gerado na view do Python) para uma variável JavaScript #}
+<script>
+    const SITES_MAP = JSON.parse('{{ sites_map_json|escapejs }}');
+</script>
+
+{# Lógica principal da página #}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // --- Lógica do Hostname Dinâmico ---
+    const siteSelect = document.querySelector('[name=site]');
+    const hostnameInput = document.querySelector('[name=hostname]');
+
+    if (siteSelect && hostnameInput) {
+        siteSelect.addEventListener('change', function() {
+            const selectedSiteId = this.value;
+
+            if (selectedSiteId) {
+                const siteSlug = SITES_MAP[selectedSiteId];
+                if (siteSlug) {
+                    // ATENÇÃO: Esta é a lógica de geração do nome que você deve customizar
+                    const prefixo = "rs-rnp-cl-rt-";
+                    const novoHostname = prefixo + siteSlug;
+
+                    hostnameInput.value = novoHostname;
+                    hostnameInput.removeAttribute('readonly'); // Habilita o campo para edição se necessário
+                }
+            } else {
+                hostnameInput.value = ''; // Limpa o campo se nenhum site for selecionado
+                hostnameInput.setAttribute('readonly', true); // Desabilita novamente
+            }
+        });
+    }
+
+    // --- Lógica do Modal para Criar Site ---
+    const siteModalEl = document.getElementById('siteCreateModal');
+    if (!siteModalEl) return;
+
+    const siteModal = new bootstrap.Modal(siteModalEl);
+    const siteCreateForm = document.getElementById('siteCreateForm');
+
+    siteCreateForm.addEventListener('submit', function(event) {
+        event.preventDefault(); // Impede o envio normal que recarregaria a página
+
+        const formData = new FormData(siteCreateForm);
+        const url = "{% url 'plugins:netbox_cria_device:site_add_modal' %}";
+        const csrfToken = document.querySelector('input[name=csrfmiddlewaretoken]').value;
+
+        // Envia os dados do novo site para o backend via AJAX (Fetch API)
+        fetch(url, {
+            method: 'POST',
+            body: formData,
+            headers: {
+                'X-CSRFToken': csrfToken
+            }
+        })
+        .then(response => {
+            if (!response.ok) {
+                // Se o servidor retornou um erro (ex: 400, 500)
+                throw new Error('A resposta do servidor não foi OK: ' + response.statusText);
+            }
+            return response.json();
+        })
+        .then(data => {
+            if (data.status === 'success') {
+                // Se o backend retornou sucesso...
+                // 1. Cria uma nova <option> para o select principal
+                const newOption = new Option(data.text, data.id, true, true);
+
+                // 2. Adiciona a nova opção ao select e a seleciona
+                mainSiteSelect.appendChild(newOption);
+                mainSiteSelect.dispatchEvent(new Event('change')); // Dispara o evento 'change' para atualizar o hostname!
+
+                // 3. Fecha o modal
+                siteModal.hide();
+
+                // 4. Limpa o formulário do modal para a próxima vez
+                siteCreateForm.reset();
+            } else {
+                // Se o backend retornou um erro de validação
+                alert('Erro ao criar o site: ' + data.message);
+            }
+        })
+        .catch(error => {
+            console.error('Erro na requisição AJAX:', error);
+            alert('Ocorreu um erro de comunicação com o servidor.');
+        });
+    });
+});
+</script>
+{% endblock %}
